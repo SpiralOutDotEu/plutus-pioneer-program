@@ -317,3 +317,100 @@ scrAddress = scriptAddress validator
 
 ## the rest remains the same
 
+
+# Is Data
+
+> in repl:
+> ```nix
+> :l src/Week02/Typed.hs
+> import PlutusTx
+> import PlutusTx.IsData.class
+> :i IsData
+> ....
+> toData (42 :: Integer)
+> -- returns: I 42
+> fromData (I 42) :: Maybe Integer
+> -- returns: Just 42
+> fromData (List []) :: Maybe Integer
+> -- returns: Nothing
+> ```
+
+## Replace the redeemer from integer to custom data type
+
+## Create the new data type
+
+```haskell
+newtype MySillyRedeemer = MySillyRedeemer Integer
+```
+
+and convert to IsData with PlutusTx
+
+```haskell
+PlutusTx.unstableMakeIsData ''MySillyRedeemer
+```
+> Important: `PlutusTx.unstableMakeIsData` might break through Plutus version when more than parameters are used. For this example is no problem as it has only one parameter `Constr 0 [I 42`. On more parameter `stable` should be used instead,
+
+
+## Define in validator
+
+```haskell
+-- Replace this:
+mkValidator :: () -> Integer -> ScriptContext -> Bool
+-- to this:
+mkValidator :: () -> MySillyRedeemer -> ScriptContext -> Bool
+```
+
+```haskell
+-- Replace in Typed definition
+data Typed
+instance Scripts.ValidatorTypes Typed where
+    type instance DatumType Typed = ()
+    type instance RedeemerType Typed = Integer
+-- to the custom instance MySillyRedeemer
+data Typed
+instance Scripts.ValidatorTypes Typed where
+    type instance DatumType Typed = ()
+    type instance RedeemerType Typed = MySillyRedeemer
+```
+
+
+```haskell
+-- replace in validator's compile wrap:
+typedValidator :: Scripts.TypedValidator Typed
+typedValidator = Scripts.mkTypedValidator @Typed
+    $$(PlutusTx.compile [|| mkValidator ||])
+    $$(PlutusTx.compile [|| wrap ||])
+  where
+    wrap = Scripts.wrapValidator @() @Integer
+-- to a one that expects MySillyRedeemer
+typedValidator :: Scripts.TypedValidator Typed
+typedValidator = Scripts.mkTypedValidator @Typed
+    $$(PlutusTx.compile [|| mkValidator ||])
+    $$(PlutusTx.compile [|| wrap ||])
+  where
+    wrap = Scripts.wrapValidator @() @MySillyRedeemer
+```
+
+## Define in grab function
+
+```haskell
+grab n = do
+    ...
+    -- Replace the Integer definition:
+    tx      = mconcat [mustSpendScriptOutput oref $ Redeemer $ I n | oref <- orefs]
+    -- to a toData form of MySillyRedeemer
+    tx      = mconcat [mustSpendScriptOutput oref $ Redeemer $ PlutusTx.toData (MySillyRedeemer n) | oref <- orefs]
+    ...
+```
+
+## shell test
+
+> ```nix
+> :l src/Week02/IsData.hs
+> import PlutusTx
+> import PlutusTx.IsData.Class
+> toData (MySillyRedeemer 42)
+> --Returns: Constr 0 [I 42]
+> toData (MySillyRedeemer 2)
+> --Returns: Constr 0 [I 2]
+```
