@@ -360,6 +360,15 @@ mkValidator :: () -> Integer -> ScriptContext -> Bool
 mkValidator :: () -> MySillyRedeemer -> ScriptContext -> Bool
 ```
 
+
+
+```haskell
+-- Replace this
+mkValidator _ r _ = traceIfFalse "wrong redeemer" $ r == 42
+-- to this
+mkValidator _ (MySillyRedeemer r) _ = traceIfFalse "wrong redeemer" $ r == 42
+```
+
 ```haskell
 -- Replace in Typed definition
 data Typed
